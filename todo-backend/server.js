@@ -1,67 +1,63 @@
 const express = require("express");
-const cors = require("cors");
+const mongoose = require("mongoose");
+const pool = require("./db");
 
 const app = express();
 
-app.use(cors());
 app.use(express.json());
 
-let todos = [
-    { id: 1, text: "Learn Express", completed: false },
-    { id: 2, text: "Build a REST API", completed: false }
-];
+mongoose.connect("mongodb://localhost:27017/tododb_mongo")
+    .then(() => console.log("Connected to MongoDB"))
+    .catch((err) => console.error("MongoDB connection error:", err));
 
-app.get("/api/todos", (req, res) => {
+const todoSchema = new mongoose.Schema({
+    text: {
+        type: String,
+        required: true
+    },
+    completed: {
+        type: Boolean,
+        default: false
+    }
+});
+
+const Todo = mongoose.model("Todo", todoSchema);
+
+app.get("/api/todos", async (req, res) => {
+    const result = await pool.query(
+        "SELECT * FROM todos ORDER BY id"
+    );
+
+    res.json(result.rows);
+});
+
+
+app.post("/api/todos", async (req, res) => {
+    const result = await pool.query(
+        "INSERT INTO todos (text) VALUES ($1) RETURNING *",
+        [req.body.text]
+    );
+
+    res.json(result.rows[0]);
+});
+
+app.get("/api/todos-mongo", async (req, res) => {
+    const todos = await Todo.find();
+
     res.json(todos);
 });
 
-app.post("/api/todos", (req, res) => {
-    const newTodo = {
-        id: Date.now(),
-        text: req.body.text,
-        completed: false
-    };
+app.post("/api/todos-mongo", async (req, res) => {
+    const newTodo = new Todo({
+        text: req.body.text
+    });
 
-    todos.push(newTodo);
+    await newTodo.save();
+
     res.json(newTodo);
 });
 
-const PORT = 3000;
 
-app.put("/api/todos/:id", (req, res) => {
-  const id = Number(req.params.id);
-
-  const todo = todos.find((todo) => todo.id === id);
-
-  if (!todo) {
-    return res.status(404).json({
-      message: "Todo not found"
-    });
-  }
-
-  todo.completed = req.body.completed;
-
-  res.json(todo);
-});
-
-app.delete("/api/todos/:id", (req, res) => {
-  const id = Number(req.params.id);
-
-  const todoIndex = todos.findIndex(
-    (todo) => todo.id === id
-  );
-
-  if (todoIndex === -1) {
-    return res.status(404).json({
-      message: "Todo not found"
-    });
-  }
-
-  const deletedTodo = todos.splice(todoIndex, 1);
-
-  res.json(deletedTodo[0]);
-});
-
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+app.listen(3000, () => {
+    console.log("Server running on port 3000");
 });
